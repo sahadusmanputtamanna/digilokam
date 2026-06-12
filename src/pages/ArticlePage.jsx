@@ -392,9 +392,27 @@ export default function ArticlePage({
               src={`https://api.dicebear.com/7.x/initials/svg?seed=${article.author_name || 'Admin'}`}
               alt={article.author_name}
               className="author-meta-img"
+              style={{ cursor: 'pointer' }}
+              onClick={() => {
+                if (article.author_id) {
+                  setCurrentRoute(`author/${article.author_id}`);
+                  window.scrollTo(0, 0);
+                }
+              }}
             />
             <div>
-              <div className="author-name-title">{article.author_name}</div>
+              <div 
+                className="author-name-title"
+                style={{ cursor: 'pointer', color: 'var(--primary)', textDecoration: 'underline' }}
+                onClick={() => {
+                  if (article.author_id) {
+                    setCurrentRoute(`author/${article.author_id}`);
+                    window.scrollTo(0, 0);
+                  }
+                }}
+              >
+                {article.author_name}
+              </div>
               <div className="post-publish-date">
                 Published {formatDate(article.published_at || article.created_at)}
                 {article.updated_at && new Date(article.updated_at).getTime() > new Date(article.published_at || article.created_at).getTime() + 10000 && (
@@ -579,6 +597,52 @@ export default function ArticlePage({
           </div>
         </div>
       )}
+
+      {/* About the Author card */}
+      <div 
+        style={{
+          marginTop: '32px',
+          padding: '24px',
+          backgroundColor: 'var(--bg-secondary)',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border-color)',
+          display: 'flex',
+          gap: '16px',
+          alignItems: 'center',
+          textAlign: 'left'
+        }}
+      >
+        <img
+          src={article.author_avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${article.author_name || 'Admin'}`}
+          alt={article.author_name}
+          style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border-color)', cursor: 'pointer', flexShrink: 0 }}
+          onClick={() => {
+            if (article.author_id) {
+              setCurrentRoute(`author/${article.author_id}`);
+              window.scrollTo(0, 0);
+            }
+          }}
+        />
+        <div>
+          <h4 style={{ margin: '0 0 6px', fontSize: '0.95rem', fontWeight: '800' }}>
+            About the Author:{' '}
+            <span 
+              style={{ color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline' }}
+              onClick={() => {
+                if (article.author_id) {
+                  setCurrentRoute(`author/${article.author_id}`);
+                  window.scrollTo(0, 0);
+                }
+              }}
+            >
+              {article.author_name || 'Admin'}
+            </span>
+          </h4>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+            {article.author_bio || 'Contributor at DigiLokam. Sharing tech tutorials, mobile tips, and latest digital insights.'}
+          </p>
+        </div>
+      </div>
 
       {/* Related Articles Row */}
       {relatedArticles.length > 0 && (

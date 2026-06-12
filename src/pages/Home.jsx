@@ -224,7 +224,18 @@ export default function Home({
               )}
               
               <div className="magazine-hero-meta">
-                <span className="hero-meta-author">{currentSlideArticle.author_name}</span>
+                <span 
+                  className="hero-meta-author"
+                  style={{ cursor: 'pointer', color: 'var(--primary)', textDecoration: 'underline' }}
+                  onClick={() => {
+                    if (currentSlideArticle.author_id) {
+                      setCurrentRoute(`author/${currentSlideArticle.author_id}`);
+                      window.scrollTo(0, 0);
+                    }
+                  }}
+                >
+                  {currentSlideArticle.author_name}
+                </span>
                 <span className="hero-meta-divider">•</span>
                 <span className="hero-meta-date">{formatDate(currentSlideArticle.published_at)}</span>
                 <span className="hero-meta-divider">•</span>
@@ -479,7 +490,17 @@ export default function Home({
                     </h3>
                     <p className="magazine-card-excerpt">{art.description}</p>
                     <div className="magazine-card-meta">
-                      <span>{art.author_name}</span>
+                      <span
+                        style={{ cursor: 'pointer', color: 'var(--primary)' }}
+                        onClick={() => {
+                          if (art.author_id) {
+                            setCurrentRoute(`author/${art.author_id}`);
+                            window.scrollTo(0, 0);
+                          }
+                        }}
+                      >
+                        {art.author_name}
+                      </span>
                       <span>•</span>
                       <span>{formatDate(art.published_at)}</span>
                       <span>•</span>
@@ -607,7 +628,17 @@ export default function Home({
                     </h3>
                     <p className="magazine-card-excerpt">{art.description}</p>
                     <div className="magazine-card-meta">
-                      <span>{art.author_name}</span>
+                      <span
+                        style={{ cursor: 'pointer', color: 'var(--primary)' }}
+                        onClick={() => {
+                          if (art.author_id) {
+                            setCurrentRoute(`author/${art.author_id}`);
+                            window.scrollTo(0, 0);
+                          }
+                        }}
+                      >
+                        {art.author_name}
+                      </span>
                       <span>•</span>
                       <span>{formatDate(art.published_at)}</span>
                       <span>•</span>

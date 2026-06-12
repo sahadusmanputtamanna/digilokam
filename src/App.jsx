@@ -15,6 +15,7 @@ import UserProfile from './pages/UserProfile';
 import SocialTools from './pages/SocialTools';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
+import AuthorPage from './pages/AuthorPage';
 import { articleService, categoryService, settingsService, authService, bookmarkService, migrateLocalStorageToSupabase, errorLogService, affiliateService } from './supabase';
 
 export default function App() {
@@ -23,6 +24,8 @@ export default function App() {
   const [settings, setSettings] = useState({});
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [showPushOptIn, setShowPushOptIn] = useState(false);
+
   const [bookmarks, setBookmarks] = useState([]);
   const [currentRoute, setCurrentRoute] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
@@ -197,6 +200,18 @@ export default function App() {
     }
   }, [currentRoute]);
 
+  // Push Notification Opt-In Timer Effect
+  useEffect(() => {
+    if (!currentRoute.startsWith('admin') && localStorage.getItem('digilokam_push_subscribed') !== 'true') {
+      const timer = setTimeout(() => {
+        setShowPushOptIn(true);
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowPushOptIn(false);
+    }
+  }, [currentRoute]);
+
   // 4. Logout Handler
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to log out?')) {
@@ -247,6 +262,11 @@ export default function App() {
         const metaDesc = document.querySelector('meta[name="description"]');
         if (metaDesc) metaDesc.setAttribute('content', art.seo_description || art.description);
       }
+    } else if (currentRoute.startsWith('author/')) {
+      const authorId = currentRoute.split('/')[1];
+      const art = articles.find(a => String(a.author_id) === String(authorId));
+      const authorName = art?.author_name || 'Author';
+      document.title = `Articles by ${authorName} - DigiLokam`;
     } else if (currentRoute === 'about') {
       document.title = "About Us - DigiLokam";
     } else if (currentRoute === 'contact') {
@@ -317,6 +337,17 @@ export default function App() {
           bookmarks={bookmarks}
           onAddBookmark={handleAddBookmark}
           onRemoveBookmark={handleRemoveBookmark}
+        />
+      );
+    }
+
+    if (currentRoute.startsWith('author/')) {
+      const authorId = currentRoute.split('/')[1];
+      return (
+        <AuthorPage
+          authorId={authorId}
+          articles={articles}
+          setCurrentRoute={handleSetRoute}
         />
       );
     }
@@ -394,6 +425,7 @@ export default function App() {
       if (currentRoute === 'admin/logs') tab = 'logs';
       if (currentRoute === 'admin/media') tab = 'media';
       if (currentRoute === 'admin/stories') tab = 'stories';
+      if (currentRoute === 'admin/push-notifications') tab = 'push-notifications';
 
       return (
         <AdminDashboard
@@ -463,6 +495,66 @@ export default function App() {
           ) : (
             <main style={{ marginTop: '40px', marginBottom: '80px' }}>{renderActivePage()}</main>
           )}
+        </div>
+      )}
+
+      {/* Push Notification sliding banner */}
+      {showPushOptIn && (
+        <div 
+          className="push-optin-banner anim-fade-in"
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 9999,
+            maxWidth: '360px',
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 16px -8px rgba(0, 0, 0, 0.05)',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            textAlign: 'left'
+          }}
+        >
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+            <div style={{ padding: '8px', backgroundColor: 'rgba(37, 99, 235, 0.08)', color: 'var(--primary)', borderRadius: '50%', flexShrink: 0 }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            </div>
+            <div style={{ flexGrow: 1 }}>
+              <h4 style={{ margin: '0 0 4px', fontSize: '0.9rem', fontWeight: '800' }}>Enable Notifications</h4>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                Get real-time updates and push alerts for new technology guides and tutorial articles.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignSelf: 'flex-end' }}>
+            <button 
+              onClick={() => {
+                setShowPushOptIn(false);
+              }}
+              className="btn btn-secondary" 
+              style={{ padding: '6px 12px', fontSize: '0.75rem', height: 'auto' }}
+            >
+              No Thanks
+            </button>
+            <button 
+              onClick={() => {
+                localStorage.setItem('digilokam_push_subscribed', 'true');
+                // Increment subscription count
+                const count = parseInt(localStorage.getItem('digilokam_push_subscribers_count') || '124', 10);
+                localStorage.setItem('digilokam_push_subscribers_count', String(count + 1));
+                setShowPushOptIn(false);
+                alert('Simulated push notifications enabled! You will now see mock notifications logged in the Admin Panel.');
+              }}
+              className="btn btn-primary" 
+              style={{ padding: '6px 12px', fontSize: '0.75rem', height: 'auto' }}
+            >
+              Allow
+            </button>
+          </div>
         </div>
       )}
 
