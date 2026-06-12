@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit3, Save, Download, Settings, FileText, Tag, LayoutDashboard, Users, Search, MessageSquare, Mail, Check, X, ShieldAlert, Eye, AlertCircle, DollarSign, Upload, Link, Brain, Image, Bell, BookOpen } from 'lucide-react';
-import { articleService, categoryService, settingsService, storageService, subscriberService, commentService, contactMessageService, userService, campaignService, errorLogService, mediaLibraryService, notificationService, affiliateService, webStoryService } from '../supabase';
+import { Plus, Trash2, Edit3, Save, Download, Settings, FileText, Tag, LayoutDashboard, Users, Search, MessageSquare, Mail, Check, X, ShieldAlert, Eye, AlertCircle, DollarSign, Upload, Link, Brain, Image, Bell, BookOpen, Share2 } from 'lucide-react';
+import { articleService, categoryService, settingsService, storageService, subscriberService, commentService, contactMessageService, userService, campaignService, errorLogService, mediaLibraryService, notificationService, affiliateService, webStoryService, socialPublishService, supabase, isSupabaseConfigured } from '../supabase';
 
 export default function AdminDashboard({
   articles = [],
@@ -36,6 +36,29 @@ export default function AdminDashboard({
   const [localSettings, setLocalSettings] = useState(settings);
   const [alert, setAlert] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  // Autoresponder States
+  const [welcomeSubject, setWelcomeSubject] = useState('');
+  const [welcomeBody, setWelcomeBody] = useState('');
+  const [autoresponderEnabled, setAutoresponderEnabled] = useState(false);
+
+  // Push Notification States
+  const [pushLogs, setPushLogs] = useState([]);
+  const [pushTitle, setPushTitle] = useState('');
+  const [pushMessage, setPushMessage] = useState('');
+  const [pushUrl, setPushUrl] = useState('');
+  const [vapidKey, setVapidKey] = useState('BEl69ZURrTh9Ja3M5S55d-T846b45yT7c96oT22Gz8-7y71b56yT');
+  const [sendingPush, setSendingPush] = useState(false);
+  const [pushSubscribersCount, setPushSubscribersCount] = useState(() => {
+    return parseInt(localStorage.getItem('digilokam_push_subscribers_count') || '124', 10);
+  });
+
+  // Social Auto-Publishing Previews States
+  const [socialPlatform, setSocialPlatform] = useState('twitter'); // 'twitter' | 'facebook'
+  const [socialLogs, setSocialLogs] = useState([]);
+
+  // Author Selection State
+  const [artAuthorId, setArtAuthorId] = useState('');
 
   const [subscribers, setSubscribers] = useState([]);
   const [searchSubQuery, setSearchSubQuery] = useState('');
@@ -81,7 +104,7 @@ export default function AdminDashboard({
       setLoadingCms(true);
       setCmsError(null);
       try {
-        const [subs, comms, msgs, usrs, camps, errLogs, media, notifs, links, stors] = await Promise.all([
+        const [subs, comms, msgs, usrs, camps, errLogs, media, notifs, links, stors, socLogs] = await Promise.all([
           subscriberService.getAll(),
           commentService.getAll(),
           contactMessageService.getAll(),
@@ -91,7 +114,8 @@ export default function AdminDashboard({
           mediaLibraryService.getAll(),
           notificationService.getAll(),
           affiliateService.getAll(),
-          webStoryService.getAll()
+          webStoryService.getAll(),
+          socialPublishService.getAll()
         ]);
         setSubscribers(subs);
         setComments(comms);
@@ -103,6 +127,7 @@ export default function AdminDashboard({
         setNotifications(notifs || []);
         setAffiliateLinks(links || []);
         setStories(stors || []);
+        setSocialLogs(socLogs || []);
       } catch (e) {
         console.error("Error loading CMS data:", e);
         setCmsError(e.message || 'Failed to load dashboard data.');
@@ -119,6 +144,29 @@ export default function AdminDashboard({
         setSiteSettings(JSON.parse(savedSite));
       } catch (e) {
         console.error("Error loading site settings:", e);
+      }
+    }
+
+    // Load autoresponder settings from localStorage
+    const savedAuto = localStorage.getItem('digilokam_welcome_autoresponder');
+    if (savedAuto) {
+      try {
+        const auto = JSON.parse(savedAuto);
+        setWelcomeSubject(auto.subject || '');
+        setWelcomeBody(auto.body || '');
+        setAutoresponderEnabled(!!auto.enabled);
+      } catch (e) {
+        console.error("Error loading autoresponder settings:", e);
+      }
+    }
+
+    // Load simulated push notifications logs
+    const savedPushLogs = localStorage.getItem('digilokam_push_logs');
+    if (savedPushLogs) {
+      try {
+        setPushLogs(JSON.parse(savedPushLogs));
+      } catch (e) {
+        console.error("Error loading push logs:", e);
       }
     }
   }, []);
@@ -296,6 +344,201 @@ export default function AdminDashboard({
     triggerAlert('General site configurations saved successfully!', 'success');
   };
 
+  // Welcome Autoresponder Handler
+  const handleSaveAutoresponder = (e) => {
+    e.preventDefault();
+    const payload = {
+      enabled: autoresponderEnabled,
+      subject: welcomeSubject,
+      body: welcomeBody
+    };
+    localStorage.setItem('digilokam_welcome_autoresponder', JSON.stringify(payload));
+    triggerAlert('Welcome Email Autoresponder saved successfully!', 'success');
+  };
+
+  // Push Notification Simulation Broadcast Handler
+  const handleSendPushBroadcast = (e) => {
+    e.preventDefault();
+    if (!pushTitle.trim() || !pushMessage.trim()) return;
+    setSendingPush(true);
+    
+    // Simulate push broadcast delay
+    setTimeout(() => {
+      const newLog = {
+        id: 'push-' + Date.now(),
+        title: pushTitle,
+        message: pushMessage,
+        url: pushUrl || '/',
+        sent_to: pushSubscribersCount,
+        status: 'delivered',
+        created_at: new Date().toISOString()
+      };
+      
+      const updatedLogs = [newLog, ...pushLogs];
+      setPushLogs(updatedLogs);
+      localStorage.setItem('digilokam_push_logs', JSON.stringify(updatedLogs));
+      
+      setPushTitle('');
+      setPushMessage('');
+      setPushUrl('');
+      setSendingPush(false);
+      triggerAlert(`Push notification broadcasted successfully to ${pushSubscribersCount} devices!`, 'success');
+    }, 1200);
+  };
+
+  // Mock Social Publishing Sharing Action
+  const handleMockSocialPublish = async (platform) => {
+    if (!editingArticle || !editingArticle.id) {
+      triggerAlert('Please save the article first before publishing to social media.', 'warning');
+      return;
+    }
+    
+    // Check if ID is a mock ID (e.g. starting with art-)
+    if (editingArticle.id.startsWith('art-')) {
+      triggerAlert('Seed articles cannot be shared. Please create a new database article first.', 'warning');
+      return;
+    }
+
+    try {
+      const newPublishLog = {
+        article_id: editingArticle.id,
+        platform: platform,
+        status: 'success'
+      };
+      await socialPublishService.add(newPublishLog);
+      
+      // Refresh local state list
+      const updated = await socialPublishService.getAll();
+      setSocialLogs(updated || []);
+      
+      triggerAlert(`Mock published to ${platform} successfully! Log stored in DB.`, 'success');
+    } catch (err) {
+      console.error("[Social Publishing] Error sharing article:", err);
+      triggerAlert('Failed to log social media share.', 'danger');
+    }
+  };
+
+  // JSON Database Backup Export Handler
+  const handleExportBackup = () => {
+    try {
+      const backupData = {
+        articles,
+        categories,
+        comments,
+        contact_messages: messages,
+        subscribers,
+        web_stories: stories,
+        settings: localSettings,
+        site_settings: siteSettings,
+        exported_at: new Date().toISOString(),
+        version: '1.0'
+      };
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `digilokam_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      triggerAlert('Database backup JSON exported successfully!', 'success');
+    } catch (err) {
+      console.error("[Backup] Export error:", err);
+      triggerAlert('Failed to export backup: ' + err.message, 'danger');
+    }
+  };
+
+  // JSON Database Backup Import Restore Handler
+  const handleImportBackup = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const backupData = JSON.parse(event.target.result);
+        
+        if (!backupData.articles || !backupData.categories || !backupData.subscribers) {
+          throw new Error('Invalid backup file format. Missing core collections.');
+        }
+
+        if (window.confirm(`Warning: Restoring backup will overwrite local state and sync to database. Do you want to proceed with importing ${backupData.articles.length} articles, ${backupData.categories.length} categories, and ${backupData.subscribers.length} subscribers?`)) {
+          
+          localStorage.setItem('digilokam_articles', JSON.stringify(backupData.articles));
+          localStorage.setItem('digilokam_categories', JSON.stringify(backupData.categories));
+          localStorage.setItem('digilokam_subscribers', JSON.stringify(backupData.subscribers));
+          
+          if (backupData.comments) localStorage.setItem('digilokam_comments', JSON.stringify(backupData.comments));
+          if (backupData.contact_messages) localStorage.setItem('digilokam_contact_messages', JSON.stringify(backupData.contact_messages));
+          if (backupData.web_stories) localStorage.setItem('digilokam_web_stories', JSON.stringify(backupData.web_stories));
+          if (backupData.settings) localStorage.setItem('digilokam_settings', JSON.stringify(backupData.settings));
+          if (backupData.site_settings) localStorage.setItem('digilokam_site_settings', JSON.stringify(backupData.site_settings));
+
+          if (isSupabaseConfigured) {
+            try {
+              if (backupData.categories.length > 0) {
+                await supabase.from('categories').upsert(backupData.categories.map(c => ({
+                  id: c.id,
+                  name: c.name,
+                  slug: c.slug,
+                  description: c.description,
+                  created_at: c.created_at || new Date().toISOString()
+                })));
+              }
+              if (backupData.articles.length > 0) {
+                const sanitizedArticles = backupData.articles.map(art => {
+                  const cleaned = {
+                    id: art.id.startsWith('art-') ? undefined : art.id,
+                    title: art.title,
+                    slug: art.slug,
+                    content: art.content,
+                    description: art.description,
+                    image_url: art.image_url,
+                    category_id: art.category_id,
+                    tags: art.tags || [],
+                    is_featured: art.is_featured || false,
+                    is_draft: art.is_draft || false,
+                    views: art.views || 0,
+                    read_time: art.read_time || art.reading_time || '5 min read',
+                    seo_title: art.seo_title || art.title,
+                    seo_description: art.seo_description || art.description,
+                    created_at: art.created_at || new Date().toISOString(),
+                    updated_at: art.updated_at || new Date().toISOString(),
+                    is_sponsored: art.is_sponsored || false,
+                    sponsor_name: art.sponsor_name || '',
+                    sponsor_logo: art.sponsor_logo || ''
+                  };
+                  if (cleaned.id === undefined) delete cleaned.id;
+                  return cleaned;
+                });
+                for (const art of sanitizedArticles) {
+                  await supabase.from('articles').upsert([art]);
+                }
+              }
+              if (backupData.subscribers.length > 0) {
+                await supabase.from('subscribers').upsert(backupData.subscribers.map(s => ({
+                  email: s.email,
+                  status: s.status || 'active',
+                  subscribed_at: s.subscribed_at || new Date().toISOString()
+                })));
+              }
+            } catch (supErr) {
+              console.error("[Backup] Supabase sync warning during restore:", supErr);
+            }
+          }
+
+          alert('Data restored successfully! The page will now reload.');
+          window.location.reload();
+        }
+      } catch (err) {
+        console.error("[Backup] Import error:", err);
+        alert('Restoration failed: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const [uploadError, setUploadError] = useState(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
@@ -432,6 +675,7 @@ export default function AdminDashboard({
     setArtIsSponsored(false);
     setArtSponsorName('');
     setArtSponsorLogo('');
+    setArtAuthorId('');
     setShowEditorForm(true);
   };
 
@@ -469,6 +713,7 @@ export default function AdminDashboard({
     setArtIsSponsored(!!art.is_sponsored);
     setArtSponsorName(art.sponsor_name || '');
     setArtSponsorLogo(art.sponsor_logo || '');
+    setArtAuthorId(art.author_id || '');
     setShowEditorForm(true);
   };
 
@@ -533,7 +778,8 @@ export default function AdminDashboard({
       published_at: artPublishedAt ? new Date(artPublishedAt).toISOString() : null,
       is_sponsored: artIsSponsored,
       sponsor_name: artSponsorName,
-      sponsor_logo: artSponsorLogo
+      sponsor_logo: artSponsorLogo,
+      author_id: artAuthorId || null
     };
 
     if (editingArticle) {
@@ -1752,10 +1998,22 @@ export default function AdminDashboard({
                         style={{ backgroundColor: 'var(--bg-primary)' }}
                       />
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '10px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        If scheduled in the future, the article will remain hidden on the public site until the scheduled time.
-                      </span>
+                    <div>
+                      <label className="form-label">Assign Author</label>
+                      <select
+                        value={artAuthorId}
+                        onChange={(e) => setArtAuthorId(e.target.value)}
+                        className="form-control"
+                        style={{ backgroundColor: 'var(--bg-primary)' }}
+                      >
+                        <option value="">Default Admin/Creator</option>
+                        {usersList
+                          .filter(u => ['admin', 'editor', 'author', 'contributor'].includes(u.role))
+                          .map(u => (
+                            <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
+                          ))
+                        }
+                      </select>
                     </div>
                   </div>
 
@@ -2027,6 +2285,135 @@ export default function AdminDashboard({
                     )}
                   </div>
 
+                  {/* Social Media Card Previews & Mock Auto-Publishing */}
+                  <div className="card" style={{ padding: '20px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', margin: '20px 0', textAlign: 'left' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Share2 size={18} style={{ color: 'var(--primary)' }} />
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 'bold', margin: 0 }}>Social Media Preview & Auto-Publishing</h4>
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setSocialPlatform('twitter')}
+                          className={`btn ${socialPlatform === 'twitter' ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ fontSize: '0.75rem', padding: '4px 10px', height: 'auto' }}
+                        >
+                          Twitter Card
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSocialPlatform('facebook')}
+                          className={`btn ${socialPlatform === 'facebook' ? 'btn-primary' : 'btn-secondary'}`}
+                          style={{ fontSize: '0.75rem', padding: '4px 10px', height: 'auto' }}
+                        >
+                          Facebook Link
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }} className="grid-responsive-split">
+                      {/* Left Side: Mock Previews */}
+                      <div>
+                        {socialPlatform === 'twitter' ? (
+                          /* Simulated Twitter Card Preview */
+                          <div style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '12px', backgroundColor: '#15202b', color: '#ffffff', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.9rem' }}>DL</div>
+                              <div>
+                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                  <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>DigiLokam</span>
+                                  <span style={{ color: '#8899a6', fontSize: '0.8rem' }}>@digilokam · Just now</span>
+                                </div>
+                                <p style={{ margin: '4px 0 8px 0', fontSize: '0.85rem', lineHeight: '1.4' }}>
+                                  🚀 Just published: {artTitle || 'Untitled Article'}! Read the full guide here. #technologynews
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {/* Twitter Media Card Block */}
+                            <div style={{ border: '1px solid #38444d', borderRadius: '16px', overflow: 'hidden', cursor: 'pointer', backgroundColor: '#192734' }}>
+                              <img
+                                src={previewImage || 'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=600&h=300&q=80'}
+                                alt="Twitter card preview"
+                                style={{ width: '100%', height: '180px', objectFit: 'cover', borderBottom: '1px solid #38444d' }}
+                              />
+                              <div style={{ padding: '10px 12px' }}>
+                                <span style={{ fontSize: '0.75rem', color: '#8899a6', display: 'block', textTransform: 'lowercase' }}>digilokam.com</span>
+                                <span style={{ fontWeight: '700', fontSize: '0.85rem', display: 'block', margin: '2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{artTitle || 'Article Title'}</span>
+                                <span style={{ fontSize: '0.8rem', color: '#8899a6', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.3' }}>{artDesc || 'Article short excerpt description.'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Simulated Facebook Link Preview */
+                          <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px', backgroundColor: '#ffffff', color: '#1c1e21', fontFamily: 'SFProText-Regular, Helvetica, Arial, sans-serif' }}>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>D</div>
+                              <div>
+                                <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#050505', display: 'block' }}>DigiLokam</span>
+                                <span style={{ color: '#65676b', fontSize: '0.75rem' }}>Just now · 🌐</span>
+                              </div>
+                            </div>
+                            <p style={{ margin: '4px 0 8px 0', fontSize: '0.85rem', lineHeight: '1.4' }}>
+                              Check out our latest publication on {artTitle || 'Untitled Article'}! Full tutorial available online.
+                            </p>
+                            
+                            {/* Facebook Media Card Block */}
+                            <div style={{ border: '1px solid #e5e5e5', backgroundColor: '#f2f3f5', cursor: 'pointer' }}>
+                              <img
+                                src={previewImage || 'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=600&h=300&q=80'}
+                                alt="Facebook card preview"
+                                style={{ width: '100%', height: '180px', objectFit: 'cover' }}
+                              />
+                              <div style={{ padding: '10px 12px', borderTop: '1px solid #ddd' }}>
+                                <span style={{ fontSize: '0.75rem', color: '#65676b', display: 'block', textTransform: 'uppercase' }}>digilokam.com</span>
+                                <span style={{ fontWeight: 'bold', fontSize: '0.9rem', display: 'block', margin: '2px 0', color: '#1d2129' }}>{artTitle || 'Article Title'}</span>
+                                <span style={{ fontSize: '0.75rem', color: '#606770', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.3' }}>{artDesc || 'Article short excerpt description.'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right Side: Mock Share Actions */}
+                      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>Auto-Publishing Trigger:</span>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                          If this article is already saved, click below to mock auto-publish it to your social media accounts and log the transactions.
+                        </p>
+                        
+                        <button
+                          type="button"
+                          onClick={() => handleMockSocialPublish('twitter')}
+                          className="btn btn-outline"
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px' }}
+                          disabled={!editingArticle?.id}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                          <span>Auto-Publish on Twitter (X)</span>
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={() => handleMockSocialPublish('facebook')}
+                          className="btn btn-outline"
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px' }}
+                          disabled={!editingArticle?.id}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615z"/></svg>
+                          <span>Auto-Publish on Facebook</span>
+                        </button>
+                        
+                        {!editingArticle?.id && (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--danger)', fontStyle: 'italic' }}>
+                            * Save the article first to enable auto-publishing.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
                       <label className="checkbox-label">
@@ -2235,6 +2622,14 @@ export default function AdminDashboard({
                   style={{ fontSize: '0.8rem', padding: '6px 12px', height: 'auto' }}
                 >
                   Earnings Dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonetizationSubTab('social-sharing')}
+                  className={`btn ${monetizationSubTab === 'social-sharing' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ fontSize: '0.8rem', padding: '6px 12px', height: 'auto' }}
+                >
+                  Social Sharing Logs
                 </button>
               </div>
             </div>
@@ -2514,6 +2909,62 @@ export default function AdminDashboard({
                     </div>
                   </div>
                 </div>
+            )}
+
+            {monetizationSubTab === 'social-sharing' && (
+              <div className="card" style={{ padding: '24px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-lg)', textAlign: 'left' }}>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: '800', marginBottom: '16px' }}>Social Auto-Publishing Sharing Logs</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px', lineHeight: '1.5' }}>
+                  A history of articles that were auto-shared to social media channels (Twitter, Facebook, etc.) and logged to the database.
+                </p>
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Article Title</th>
+                        <th>Platform</th>
+                        <th>Status</th>
+                        <th style={{ textAlign: 'right' }}>Shared Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {socialLogs.length === 0 ? (
+                        <tr>
+                          <td colSpan="4" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>
+                            No auto-publishing sharing events logged yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        socialLogs.map((log) => {
+                          const artTitle = articles.find(a => a.id === log.article_id)?.title || 'Deleted Article';
+                          return (
+                            <tr key={log.id}>
+                              <td style={{ fontWeight: '600' }}>{artTitle}</td>
+                              <td style={{ textTransform: 'capitalize', fontWeight: 'bold', color: 'var(--primary)' }}>{log.platform}</td>
+                              <td>
+                                <span style={{ 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  padding: '2px 8px', 
+                                  borderRadius: '4px', 
+                                  fontSize: '0.7rem', 
+                                  fontWeight: 'bold', 
+                                  backgroundColor: log.status === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+                                  color: log.status === 'success' ? '#10b981' : '#ef4444' 
+                                }}>
+                                  {log.status === 'success' ? 'Published' : 'Failed'}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                                {new Date(log.shared_at).toLocaleString()}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -2568,16 +3019,23 @@ export default function AdminDashboard({
                 >
                   Broadcast Campaign
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setSubscribersView('autoresponders')}
+                  className={`btn ${subscribersView === 'autoresponders' ? 'btn-primary' : 'btn-secondary'}`}
+                >
+                  Autoresponders & Segments
+                </button>
                 {subscribersView === 'list' && (
                   <button onClick={handleExportCSV} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Download size={16} />
+                      <Download size={16} />
                     <span>Export CSV</span>
                   </button>
                 )}
               </div>
             </div>
 
-            {subscribersView === 'list' ? (
+            {subscribersView === 'list' && (
               <>
                 <div style={{ marginBottom: '20px', position: 'relative' }}>
                   <input
@@ -2654,7 +3112,9 @@ export default function AdminDashboard({
                   </table>
                 </div>
               </>
-            ) : (
+            )}
+
+            {subscribersView === 'broadcast' && (
               <div className="grid-responsive-split">
                 {/* Left: Compose Form */}
                 <form onSubmit={handleSendBroadcast} className="admin-form-editor">
@@ -2746,11 +3206,115 @@ export default function AdminDashboard({
                 </div>
               </div>
             )}
+
+            {subscribersView === 'autoresponders' && (
+              <div className="grid-responsive-split">
+                {/* Left: Autoresponder setup */}
+                <form onSubmit={handleSaveAutoresponder} className="admin-form-editor">
+                  <h3 style={{ fontSize: '1rem', fontWeight: '800', marginBottom: '16px' }}>Welcome Email Autoresponder</h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '20px', lineHeight: '1.4' }}>
+                    Configure an automated email message that will be sent instantly to new subscribers when they opt into your newsletter.
+                  </p>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <label className="checkbox-label" style={{ fontWeight: '700' }}>
+                      <input
+                        type="checkbox"
+                        checked={autoresponderEnabled}
+                        onChange={(e) => setAutoresponderEnabled(e.target.checked)}
+                      />
+                      <span>Enable Welcome Autoresponder Campaign</span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="form-label">Autoresponder Email Subject Line*</label>
+                    <input
+                      type="text"
+                      value={welcomeSubject}
+                      onChange={(e) => setWelcomeSubject(e.target.value)}
+                      className="form-control"
+                      placeholder="Welcome to DigiLokam! 🚀"
+                      required={autoresponderEnabled}
+                      disabled={!autoresponderEnabled}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label">Autoresponder Email Body Content*</label>
+                    <textarea
+                      value={welcomeBody}
+                      onChange={(e) => setWelcomeBody(e.target.value)}
+                      className="form-control"
+                      style={{ minHeight: '180px' }}
+                      placeholder="Hi there,\n\nThank you for subscribing to our newsletter..."
+                      required={autoresponderEnabled}
+                      disabled={!autoresponderEnabled}
+                    ></textarea>
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" style={{ width: 'fit-content' }}>
+                    <Save size={16} />
+                    <span>Save Autoresponder Settings</span>
+                  </button>
+                </form>
+
+                {/* Right: Segments Overview Widget */}
+                <div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: '800', marginBottom: '16px' }}>Subscriber Segments Analytics</h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '20px' }}>
+                    Breakdown analysis of your newsletter readers by email service domain and subscriber age.
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="grid-responsive-2">
+                    <div className="card" style={{ padding: '16px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Active Segment</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: '800', margin: '4px 0' }}>
+                        {subscribers.filter(s => s.status === 'active' || !s.status).length}
+                      </div>
+                      <span style={{ fontSize: '0.7rem', color: '#10b981' }}>100% of directory</span>
+                    </div>
+
+                    <div className="card" style={{ padding: '16px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>New (Last 7 Days)</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: '800', margin: '4px 0' }}>
+                        {(() => {
+                          const sevenDaysAgo = new Date();
+                          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                          return subscribers.filter(s => new Date(s.subscribed_at || s.created_at) >= sevenDaysAgo).length;
+                        })()}
+                      </div>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--primary)' }}>Recent opt-ins</span>
+                    </div>
+
+                    <div className="card" style={{ padding: '16px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Gmail users</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: '800', margin: '4px 0' }}>
+                        {subscribers.filter(s => s.email.toLowerCase().endsWith('@gmail.com')).length}
+                      </div>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                        {subscribers.length > 0 ? Math.round((subscribers.filter(s => s.email.toLowerCase().endsWith('@gmail.com')).length / subscribers.length) * 100) : 0}% of list
+                      </span>
+                    </div>
+
+                    <div className="card" style={{ padding: '16px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Custom Domains</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: '800', margin: '4px 0' }}>
+                        {subscribers.filter(s => {
+                          const email = s.email.toLowerCase();
+                          return !email.endsWith('@gmail.com') && !email.endsWith('@yahoo.com') && !email.endsWith('@outlook.com') && !email.endsWith('@hotmail.com');
+                        }).length}
+                      </div>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Professional emails</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Tab 6: Comments Management */}
-        {activeTab === 'comments' && (
           <div className="anim-fade-in">
             <div className="pane-header" style={{ marginBottom: '24px' }}>
               <h2 className="pane-title">Comments Moderation</h2>
