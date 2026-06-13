@@ -29,7 +29,7 @@ export default function AuthorPage({
     <div className="anim-fade-in">
       {/* Author Bio Header Card */}
       <div
-        className="card"
+        className="card grid-responsive-split"
         style={{
           background: 'var(--bg-secondary)',
           padding: '32px',
@@ -40,7 +40,6 @@ export default function AuthorPage({
           gap: '24px',
           alignItems: 'center'
         }}
-        className="grid-responsive-split"
       >
         <img
           src={authorAvatar}
